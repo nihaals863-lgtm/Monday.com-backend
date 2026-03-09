@@ -168,9 +168,9 @@ const Permission = sequelize.define('Permission', {
 
 const TimeSession = sequelize.define('TimeSession', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  itemId: { type: DataTypes.BIGINT, allowNull: false },
+  itemId: { type: DataTypes.STRING, allowNull: false },
   userId: { type: DataTypes.BIGINT, allowNull: false },
-  parentItemId: { type: DataTypes.BIGINT, allowNull: true },
+  parentItemId: { type: DataTypes.STRING, allowNull: true },
   itemName: { type: DataTypes.STRING },
   startTime: { type: DataTypes.DATE },
   endTime: { type: DataTypes.DATE },

@@ -78,7 +78,10 @@ router.post('/stop', auth, async (req, res) => {
         const totalDuration = allSessions.reduce((acc, sess) => acc + (sess.duration || 0), 0);
         const timeTrackingStr = formatTimeSeconds(totalDuration);
 
-        await Item.update({ timeTracking: timeTrackingStr }, { where: { id: itemId } });
+        // Only update Item table if itemId is numeric (real item, not virtual subitem)
+        if (!isNaN(itemId)) {
+            await Item.update({ timeTracking: timeTrackingStr }, { where: { id: itemId } });
+        }
 
         res.json({
             ...activeSession.toJSON(),
@@ -235,15 +238,18 @@ router.get('/stats', auth, async (req, res) => {
 
             // Group by Project (Parent Item)
             const project = session.parentItem || session.Item;
-            if (project) {
-                if (!stats.byProject[project.id]) {
-                    stats.byProject[project.id] = {
-                        id: project.id,
-                        name: project.name,
+            const projectId = project ? project.id : (session.parentItemId || session.itemId);
+            const projectName = project ? project.name : (session.itemName || 'Unnamed Item');
+
+            if (projectId) {
+                if (!stats.byProject[projectId]) {
+                    stats.byProject[projectId] = {
+                        id: projectId,
+                        name: projectName,
                         total: 0
                     };
                 }
-                stats.byProject[project.id].total += duration;
+                stats.byProject[projectId].total += duration;
             }
 
             // Group by board (Traversing from parentItem -> Group -> Board)

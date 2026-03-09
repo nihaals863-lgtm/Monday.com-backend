@@ -277,10 +277,10 @@ sequelize.authenticate()
         return type.includes('int') && !type.includes('big');
       };
 
-      if (isIntButNotBig(timeTableInfo.itemId)) {
-        console.log('Migrating time_sessions.itemId from INT to BIGINT');
+      if (isIntButNotBig(timeTableInfo.itemId) || (timeTableInfo.itemId && timeTableInfo.itemId.type.toLowerCase().includes('bigint'))) {
+        console.log('Migrating time_sessions.itemId to VARCHAR');
         await dropFK('time_sessions', 'itemId');
-        await queryInterface5.changeColumn('time_sessions', 'itemId', { type: DataTypes.BIGINT, allowNull: false });
+        await queryInterface5.changeColumn('time_sessions', 'itemId', { type: DataTypes.STRING, allowNull: false });
         console.log('✅ time_sessions.itemId migrated.');
       }
       if (isIntButNotBig(timeTableInfo.userId)) {
@@ -290,11 +290,17 @@ sequelize.authenticate()
         console.log('✅ time_sessions.userId migrated.');
       }
 
-      // Force add parentItemId to time_sessions
+      // Force add/change parentItemId to time_sessions
       try {
-        await sequelize.query('ALTER TABLE time_sessions ADD COLUMN parentItemId BIGINT NULL').catch(err => {
-          if (!err.message.includes('duplicate column')) {
-            console.warn('Silent parentItemId add:', err.message);
+        await sequelize.query('ALTER TABLE time_sessions ADD COLUMN parentItemId VARCHAR(255) NULL').catch(async err => {
+          if (err.message.includes('duplicate column')) {
+            // If it exists but is BIGINT, we might need to change it
+            if (timeTableInfo.parentitemid && timeTableInfo.parentitemid.type.toLowerCase().includes('int')) {
+              console.log('Migrating time_sessions.parentItemId to VARCHAR');
+              await queryInterface5.changeColumn('time_sessions', 'parentItemId', { type: DataTypes.STRING, allowNull: true });
+            }
+          } else {
+            console.warn('Silent parentItemId add/sync:', err.message);
           }
         });
         console.log('✅ Checked time_sessions.parentItemId');
@@ -344,13 +350,13 @@ sequelize.authenticate()
         console.warn('Virtual subitem backfill failed:', e.message);
       }
 
-      // 4. Purge orphaned sessions
+      // 4. Purge orphaned sessions (only for numeric IDs that are real items)
       try {
         console.log('Purging orphaned time sessions...');
         await sequelize.query(`
           DELETE FROM time_sessions 
-          WHERE parentItemId NOT IN (SELECT id FROM items)
-          AND parentItemId IS NOT NULL
+          WHERE parentItemId REGEXP '^[0-9]+$'
+          AND parentItemId NOT IN (SELECT id FROM items)
         `);
       } catch (err) { }
 
