@@ -197,7 +197,13 @@ router.get('/', auth, async (req, res) => {
 router.post('/', [auth, checkPermission('createMainBoards')], async (req, res) => {
   try {
     // if (req.user.role !== 'Admin' && req.user.role !== 'Manager') return res.status(403).json({ msg: 'Access denied' });
-    const board = await Board.create(req.body);
+    // Set creator as the initial coordinator/owner if not specified
+    const boardData = { ...req.body };
+    if (!boardData.ownerId) {
+      boardData.ownerId = String(req.user.id);
+    }
+    
+    const board = await Board.create(boardData);
     await Group.create({ title: 'New Group', BoardId: board.id });
     res.json(board);
   } catch (err) {
