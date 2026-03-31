@@ -4,7 +4,8 @@ const auth = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { File, Item, User, Board, Group } = require('../models');
+const { File, Item, User, Board, Group, sequelize } = require('../models');
+const { Op } = require('sequelize');
 
 // Configure multer for file storage
 const storage = multer.diskStorage({
@@ -23,10 +24,47 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // @route   GET api/files
-// @desc    Get all files
+// @desc    Get all files (Filtered by role and assignment)
 router.get('/', auth, async (req, res) => {
   try {
+    const isAdmin = req.user.role === 'Admin' || req.user.role === 'Manager';
+    
+    let whereClause = {};
+    
+    // If not admin, filter files by assigned items
+    if (!isAdmin) {
+      const userId = req.user.id;
+      
+      // Find items where user is specifically assigned OR is in the 'people' list
+      const assignedItems = await Item.findAll({
+        where: {
+          [Op.or]: [
+            { assignedToId: String(userId) },
+            { 
+              people: { 
+                [Op.like]: `%"id":${userId}%` 
+              } 
+            }
+          ]
+        },
+        attributes: ['id']
+      });
+      
+      const assignedItemIds = assignedItems.map(item => item.id);
+      
+      // Visibility rule: 
+      // 1. Files for assigned items
+      // 2. Files uploaded by the user themselves
+      whereClause = {
+        [Op.or]: [
+          { ItemId: { [Op.in]: assignedItemIds } },
+          { userId: userId }
+        ]
+      };
+    }
+
     const files = await File.findAll({
+      where: whereClause,
       include: [
         {
           model: Item,
