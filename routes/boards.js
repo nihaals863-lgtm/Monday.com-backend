@@ -167,6 +167,11 @@ router.get('/', auth, async (req, res) => {
         if (req.user.permissions.folders.includes(b.folder)) return true;
       }
 
+      // Check Board permissions
+      if (req.user.permissions?.boards && Array.isArray(req.user.permissions.boards)) {
+        if (req.user.permissions.boards.includes(b.id) || req.user.permissions.boards.includes(String(b.id))) return true;
+      }
+
       // Check assignment or ownership
       return assignedBoardIds.includes(b.id) || String(b.ownerId) === userId;
     }).map(b => {
@@ -174,6 +179,8 @@ router.get('/', auth, async (req, res) => {
 
       const hasFullAccess = isAdmin || isManager ||
         (req.user.permissions?.folders?.includes(b.folder)) ||
+        (req.user.permissions?.boards?.includes(b.id)) ||
+        (req.user.permissions?.boards?.includes(String(b.id))) ||
         String(b.ownerId) === String(req.user.id);
 
       if (hasFullAccess) {

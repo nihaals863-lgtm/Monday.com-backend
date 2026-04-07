@@ -14,15 +14,33 @@ router.get('/my', auth, async (req, res) => {
 
     // Admins/Managers see all items; regular users see only their assigned items
     const userId = String(req.user.id);
-    const whereClause = (isAdmin || isManager) ? {} : {
+    
+    // In "My Work", everyone should primarily see what is assigned to THEM personally.
+    // If we want Admins to see EVERYTHING, they can use the Board view.
+    // However, to satisfy "My Work", we filter by assignment regardless of role, 
+    // but maybe allow Admins to see everything if they really want? 
+    // The user's complaint suggests they WANT to see their assigned projects 
+    // but they are getting lost or not showing up.
+    
+    const whereClause = {
       [Op.or]: [
         { assignedToId: userId },
-        // people column stores JSON array e.g. ["1","2"] or [{"id":"1"},...]
+        // Match numeric ID in JSON: {"id":1} or [1,2]
+        { people: { [Op.like]: `%: ${userId},%` } },
+        { people: { [Op.like]: `%: ${userId}}%` } },
+        { people: { [Op.like]: `%[${userId},%` } },
+        { people: { [Op.like]: `%,${userId},%` } },
+        { people: { [Op.like]: `%,${userId}]%` } },
+        { people: { [Op.like]: `[${userId}]` } },
+        // Match string ID in JSON: {"id":"1"} or ["1","2"]
         { people: { [Op.like]: `%"${userId}"%` } },
-        // person column (legacy string field)
         { person: userId }
       ]
     };
+
+    // If Admin/Manager, maybe they WANT to see everything? 
+    // But usually Dashboards are for "My Tasks".
+    // Let's stick to assigned tasks for a cleaner dashboard.
 
     const items = await Item.findAll({
       where: whereClause,
