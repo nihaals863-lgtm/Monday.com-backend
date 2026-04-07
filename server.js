@@ -28,7 +28,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
   credentials: true
 }));
-app.options('(.*)', cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
