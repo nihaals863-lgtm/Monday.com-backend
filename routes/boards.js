@@ -158,9 +158,13 @@ router.get('/', auth, async (req, res) => {
       return group?.BoardId;
     }).filter(id => id))];
 
+    const MASTER_BOARD_TYPES = ['ai-future', 'ai-roadmap', 'dm-inquiries', 'commercial-sira'];
+
     // 3. Filter and mark access
     const filteredBoards = allBoards.filter(b => {
       if (isAdmin || isManager) return true;
+
+      const bIdStr = String(b.id);
 
       // Check folder permission
       if (req.user.permissions?.folders && Array.isArray(req.user.permissions.folders)) {
@@ -169,19 +173,22 @@ router.get('/', auth, async (req, res) => {
 
       // Check Board permissions
       if (req.user.permissions?.boards && Array.isArray(req.user.permissions.boards)) {
-        if (req.user.permissions.boards.includes(b.id) || req.user.permissions.boards.includes(String(b.id))) return true;
+        if (req.user.permissions.boards.some(pbid => String(pbid) === bIdStr)) return true;
       }
 
       // Check assignment or ownership
-      return assignedBoardIds.includes(b.id) || String(b.ownerId) === userId;
+      return assignedBoardIds.some(abid => String(abid) === bIdStr) || String(b.ownerId) === userId;
     }).map(b => {
       const board = b.toJSON();
+      const bIdStr = String(b.id);
 
-      const hasFullAccess = isAdmin || isManager ||
-        (req.user.permissions?.folders?.includes(b.folder)) ||
-        (req.user.permissions?.boards?.includes(b.id)) ||
-        (req.user.permissions?.boards?.includes(String(b.id))) ||
-        String(b.ownerId) === String(req.user.id);
+      const MASTER_BOARD_TYPES = ['ai-future', 'ai-roadmap', 'dm-inquiries', 'commercial-sira'];
+      const isMasterBoard = MASTER_BOARD_TYPES.includes(b.type);
+      const isFolderPermitted = req.user.permissions?.folders?.includes(b.folder);
+      const isBoardPermitted = req.user.permissions?.boards?.some(pbid => String(pbid) === bIdStr);
+      const isOwner = String(b.ownerId) === userId;
+
+      const hasFullAccess = isAdmin || isManager || isFolderPermitted || isBoardPermitted || isOwner;
 
       if (hasFullAccess) {
         board.access = 'full';
@@ -192,6 +199,7 @@ router.get('/', auth, async (req, res) => {
       }
       return board;
     });
+
 
     res.json(filteredBoards);
   } catch (err) {
@@ -209,7 +217,7 @@ router.post('/', [auth, checkPermission('createMainBoards')], async (req, res) =
     if (!boardData.ownerId) {
       boardData.ownerId = String(req.user.id);
     }
-    
+
     const board = await Board.create(boardData);
     await Group.create({ title: 'New Group', BoardId: board.id });
     res.json(board);

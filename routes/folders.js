@@ -36,22 +36,25 @@ router.get('/', auth, async (req, res) => {
         });
         const assignedBoardIds = [...new Set(assignedItems.map(i => i.Group?.BoardId).filter(id => id))];
 
-        // 2. Get folder names from boards user has access to (assigned or owner)
+        // 2. Get folder names from boards user has access to (assigned, owner, or explicit permission)
         const boardsWithAccess = await Board.findAll({
             where: {
                 [Op.or]: [
                     { id: assignedBoardIds },
-                    { ownerId: String(id) }
+                    { ownerId: String(id) },
+                    // Explicit board permissions
+                    { id: permissions?.boards || [] }
                 ]
             },
             attributes: ['folder']
         });
         const accessibleFolderNames = new Set(boardsWithAccess.map(b => b.folder));
 
-        // 3. Add folders from explicit permissions
+        // 3. Add folders from explicit folder permissions
         if (permissions?.folders && Array.isArray(permissions.folders)) {
             permissions.folders.forEach(f => accessibleFolderNames.add(f));
         }
+
 
         const filtered = folders.filter(f => accessibleFolderNames.has(f.name));
         res.json(filtered);

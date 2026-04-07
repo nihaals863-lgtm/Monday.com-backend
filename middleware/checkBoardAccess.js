@@ -54,7 +54,7 @@ module.exports = async (req, res, next) => {
         const board = await Board.findByPk(boardId);
         if (!board) return next();
 
-        // Check Folder Permission
+        // 1. Check folder-level permission
         if (permissions?.folders && Array.isArray(permissions.folders)) {
             if (permissions.folders.includes(board.folder)) {
                 req.boardAccess = 'full';
@@ -63,32 +63,46 @@ module.exports = async (req, res, next) => {
             }
         }
 
+        // 2. Check board-level permission
+        if (permissions?.boards && Array.isArray(permissions.boards)) {
+            // Robust check using string comparison for BigInt/Number/String mixing
+            if (permissions.boards.some(bid => String(bid) === String(boardId))) {
+                req.boardAccess = 'full';
+                req.isCoordinator = true;
+                return next();
+            }
+        }
+
+        // 3. Ownership Check
         if (String(board.ownerId) === String(id)) {
             req.boardAccess = 'full';
             req.isCoordinator = true;
             return next();
         }
 
-        // 3. Assignment Check: Check if user is assigned (via any field) to any item on this board
+        // 4. Assignment Check: Check if user is assigned (via any field) to any item on this board
         const userId = String(id);
-        const assignmentCount = await Item.count({
+        const assignedItem = await Item.findOne({
+            include: [{
+                model: Group,
+                as: 'Group',
+                where: { BoardId: boardId },
+                required: true
+            }],
             where: {
                 [Op.or]: [
                     { assignedToId: userId },
                     { people: { [Op.like]: `%"${userId}"%` } },
                     { person: userId }
                 ]
-            },
-            include: [{
-                model: Group,
-                where: { BoardId: boardId }
-            }]
+            }
         });
 
-        if (assignmentCount > 0) {
+        if (assignedItem) {
             req.boardAccess = 'assigned';
             return next();
         }
+
 
         // 4. Default: Access Denied for regular users with no involvement
         return res.status(403).json({
