@@ -9,9 +9,20 @@ const { DataTypes, Op } = require('sequelize');
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
+  credentials: true
+}));
+app.options('*', cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
+
+// Health check route
+app.get('/', (req, res) => {
+  res.json({ message: "Monday.com Clone API is running", version: "1.0.0" });
+});
 
 // Global request logger
 app.use((req, res, next) => {
@@ -434,5 +445,14 @@ app.use((req, res) => {
     msg: "Requested endpoint not found",
     method: req.method,
     path: req.url
+  });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+  console.error('[SERVER ERROR]', err);
+  res.status(500).json({
+    msg: "Internal Server Error",
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
