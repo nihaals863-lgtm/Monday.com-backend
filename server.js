@@ -9,13 +9,26 @@ const { DataTypes, Op } = require('sequelize');
 
 const app = express();
 
+const allowedOrigins = [
+  'https://mondaydotcom.kiaantechnology.com',
+  'http://localhost:5173',
+  'http://localhost:3000'
+];
+
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || allowedOrigins.includes(origin) || origin.includes('railway.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
   credentials: true
 }));
-app.options('*', cors());
+app.options('(.*)', cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
