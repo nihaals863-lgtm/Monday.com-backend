@@ -6,21 +6,31 @@ const checkPermission = require('../middleware/checkPermission');
 const { User } = require('../models');
 const multer = require('multer');
 const path = require('path');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// Multer Config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, `avatar-${Date.now()}${path.extname(file.originalname)}`);
-  }
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// Cloudinary Multer Storage
+const cloudinaryStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'monday-avatars',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    transformation: [{ width: 256, height: 256, crop: 'fill', gravity: 'face' }],
+  },
+});
+
 const upload = multer({
-  storage,
+  storage: cloudinaryStorage,
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
   fileFilter: (req, file, cb) => {
-    const filetypes = /jpeg|jpg|png|gif/;
+    const filetypes = /jpeg|jpg|png|gif|webp/;
     const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = filetypes.test(file.mimetype);
     if (mimetype && extname) return cb(null, true);
@@ -78,13 +88,21 @@ router.get('/', auth, async (req, res) => {
 });
 
 // @route   POST api/users/upload-avatar
-router.post('/upload-avatar', auth, upload.single('avatar'), (req, res) => {
+// @desc    Upload avatar to Cloudinary and save URL to user record
+router.post('/upload-avatar', auth, upload.single('avatar'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).send('No file uploaded.');
-    const avatarUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    if (!req.file) return res.status(400).json({ msg: 'No file uploaded.' });
+
+    // Cloudinary URL is in req.file.path (from multer-storage-cloudinary)
+    const avatarUrl = req.file.path;
+
+    // Persist avatar URL to the user's DB record immediately
+    await User.update({ avatar: avatarUrl }, { where: { id: req.user.id } });
+
     res.json({ avatarUrl });
   } catch (err) {
-    res.status(500).send('Server Error');
+    console.error('[UPLOAD AVATAR ERROR]', err);
+    res.status(500).json({ msg: 'Upload failed: ' + err.message });
   }
 });
 
