@@ -194,11 +194,16 @@ router.patch('/:id', [auth, checkBoardAccess], async (req, res) => {
         .map(p => String(typeof p === 'object' ? p.id : p))
         .filter(id => id && id.length <= 10); // skip team IDs (>10 chars)
 
-      // Auto-sync assignedToId to the first person in the list
+      // Auto-sync assignedToId to the first person in the list, or clear it if list is empty
       if (newPeopleIds.length > 0) {
         const firstPersonId = newPeopleIds[0];
         if (String(item.assignedToId) !== firstPersonId) {
           await item.update({ assignedToId: firstPersonId });
+        }
+      } else {
+        // People list is now empty — clear assignedToId so the board disappears from user's view
+        if (item.assignedToId) {
+          await item.update({ assignedToId: null });
         }
       }
 
@@ -229,10 +234,21 @@ router.patch('/:id', [auth, checkBoardAccess], async (req, res) => {
 
     // ─── SYNC: If 'person' (legacy) column changed, also update assignedToId ───
     if (req.body.person !== undefined && req.body.assignedToId === undefined) {
-      const personId = String(req.body.person);
-      if (personId && personId.length <= 10 && String(item.assignedToId) !== personId) {
-        await item.update({ assignedToId: personId });
+      const personVal = req.body.person;
+      // If cleared (null, empty string, 'null') → clear assignedToId
+      if (!personVal || personVal === 'null' || personVal === '') {
+        await item.update({ assignedToId: null });
+      } else {
+        const personId = String(personVal);
+        if (personId && personId.length <= 10 && String(item.assignedToId) !== personId) {
+          await item.update({ assignedToId: personId });
+        }
       }
+    }
+
+    // ─── SYNC: If assignedToId is explicitly set to null/empty, ensure it's cleared ───
+    if (req.body.assignedToId !== undefined && (!req.body.assignedToId || req.body.assignedToId === 'null')) {
+      await item.update({ assignedToId: null });
     }
 
     // ─── If assignedToId changed (directly or via sync), notify the new user ───
@@ -299,6 +315,34 @@ router.delete('/:id', [auth, checkBoardAccess], async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send('Server error');
+  }
+});
+
+// @route   PATCH api/items/bulk/update
+// @desc    Bulk update items (e.g. for cascading label cleanup)
+router.patch('/bulk/update', auth, async (req, res) => {
+  try {
+    const { itemIds, updates, condition } = req.body;
+    
+    // Safety check: Don't allow empty updates AND empty condition
+    if (!updates || (Object.keys(updates).length === 0 && !condition)) {
+      return res.status(400).json({ msg: 'No updates provided' });
+    }
+
+    let whereClause = {};
+    if (itemIds && Array.isArray(itemIds)) {
+      whereClause.id = { [Op.in]: itemIds };
+    } else if (condition) {
+      whereClause = condition;
+    } else {
+      return res.status(400).json({ msg: 'No selection or condition provided' });
+    }
+
+    const [rowsAffected] = await Item.update(updates, { where: whereClause });
+    res.json({ msg: 'Bulk update successful', rowsAffected });
+  } catch (err) {
+    console.error('[BULK UPDATE ERROR]:', err);
+    res.status(500).send('Server error: ' + err.message);
   }
 });
 

@@ -12,7 +12,7 @@ const app = express();
 const allowedOrigins = [
   'https://mondaydotcom.kiaantechnology.com',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
 ];
 
 app.use(cors({
@@ -21,6 +21,7 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin) || origin.includes('railway.app')) {
       callback(null, true);
     } else {
+      
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -58,7 +59,6 @@ app.use('/api/folders', require('./routes/folders'));
 app.use('/api/time', require('./routes/timeTracking'));
 app.use('/api/payroll', require('./routes/payroll'));
 app.use('/api/ai-projects', require('./routes/aiProjects'));
-
 
 
 const PORT = process.env.PORT || 5000;
