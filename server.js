@@ -388,6 +388,29 @@ sequelize.authenticate()
       console.warn('⚠️  TimeSessions table migration failed:', error.message);
     }
 
+    // Files Table Migrations (Cloudinary support)
+    try {
+      const qiFiles = sequelize.getQueryInterface();
+      const filesTableInfo = await qiFiles.describeTable('files');
+      const filesCols = Object.keys(filesTableInfo).map(k => k.toLowerCase());
+
+      // Add cloudinaryId column if missing (stores Cloudinary public_id for deletion)
+      if (!filesCols.includes('cloudinaryid')) {
+        console.log('Adding missing column: cloudinaryId to files');
+        await qiFiles.addColumn('files', 'cloudinaryId', { type: DataTypes.STRING, allowNull: true });
+      }
+
+      // Upgrade url column from VARCHAR to TEXT to support long Cloudinary URLs
+      if (filesTableInfo.url && filesTableInfo.url.type.toLowerCase().includes('varchar')) {
+        console.log('Upgrading files.url from VARCHAR to TEXT for Cloudinary URLs');
+        await sequelize.query('ALTER TABLE files MODIFY url TEXT NOT NULL');
+      }
+
+      console.log('✅ Files table migrations completed successfully.');
+    } catch (error) {
+      console.warn('⚠️  Files table migration failed:', error.message);
+    }
+
     return sequelize.sync();
   })
   .then(async () => {

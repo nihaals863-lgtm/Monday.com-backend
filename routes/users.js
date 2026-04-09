@@ -175,6 +175,7 @@ router.put('/password', auth, async (req, res) => {
   }
 });
 
+
 // @route   POST api/users
 // @desc    Create a user (Admin or with manageMembers permission)
 router.post('/', [auth, checkPermission('manageMembers')], async (req, res) => {

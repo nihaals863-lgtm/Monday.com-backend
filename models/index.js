@@ -122,7 +122,8 @@ const Notification = sequelize.define('Notification', {
 
 const File = sequelize.define('File', {
   name: { type: DataTypes.STRING, allowNull: false },
-  url: { type: DataTypes.STRING, allowNull: false },
+  url: { type: DataTypes.TEXT, allowNull: false }, // Cloudinary URL (long)
+  cloudinaryId: { type: DataTypes.STRING },        // Cloudinary public_id for deletion
   size: { type: DataTypes.INTEGER },
   type: { type: DataTypes.STRING },
   uploadedBy: { type: DataTypes.STRING }
