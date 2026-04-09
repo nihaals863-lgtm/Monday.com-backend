@@ -13,6 +13,23 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Validate Cloudinary at startup
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const apiKey = process.env.CLOUDINARY_API_KEY;
+const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+if (!cloudName || !apiKey || !apiSecret) {
+  console.error('====================================================');
+  console.error('[CLOUDINARY ERROR] Missing environment variables!');
+  console.error('  CLOUDINARY_CLOUD_NAME:', cloudName ? '✓ SET' : '✗ MISSING');
+  console.error('  CLOUDINARY_API_KEY:   ', apiKey    ? '✓ SET' : '✗ MISSING');
+  console.error('  CLOUDINARY_API_SECRET:', apiSecret ? '✓ SET' : '✗ MISSING');
+  console.error('  --> Add these to Railway Dashboard > Variables');
+  console.error('====================================================');
+} else {
+  console.log('[CLOUDINARY] ✓ Configured — cloud:', cloudName);
+}
+
 // Use memory storage — no temp files on disk
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -92,29 +109,38 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
       return res.status(400).json({ msg: 'No file uploaded' });
     }
 
-    // Determine resource type based on MIME type
-    let resourceType = 'raw'; // default for documents
+    console.log(`[UPLOAD] ${req.file.originalname} (${req.file.mimetype}, ${req.file.size}B)`);
+
+    // Determine resource type
+    let resourceType = 'raw';
     if (req.file.mimetype.startsWith('image/')) resourceType = 'image';
     else if (req.file.mimetype.startsWith('video/')) resourceType = 'video';
+    else if (req.file.mimetype.startsWith('audio/')) resourceType = 'audio';
+
+    // Strip extension from public_id — Cloudinary adds extension automatically
+    const baseName = req.file.originalname.replace(/\.[^/.]+$/, '');
+    const safeBase = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const publicId = `monday-files/${Date.now()}-${safeBase}`;
 
     // Upload to Cloudinary
     const result = await uploadToCloudinary(req.file.buffer, {
-      folder: 'monday-files',
       resource_type: resourceType,
-      public_id: `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`,
-      use_filename: true,
+      public_id: publicId,
     });
+
+    console.log(`[UPLOAD] Cloudinary OK — URL: ${result.secure_url}`);
 
     const newFile = await File.create({
       name: req.file.originalname,
-      url: result.secure_url,         // Full Cloudinary URL
-      cloudinaryId: result.public_id, // Save for future deletion
+      url: result.secure_url,
+      cloudinaryId: result.public_id,
       size: req.file.size,
       type: req.file.mimetype,
       uploadedBy: req.user.name,
-      userId: req.user.id,
       ItemId: req.body.itemId || null
     });
+
+    console.log(`[UPLOAD] DB saved — id: ${newFile.id}`);
 
     const fileWithUser = await File.findByPk(newFile.id, {
       include: [{ model: User, attributes: ['name', 'avatar'] }]
@@ -122,7 +148,7 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 
     res.json(fileWithUser);
   } catch (err) {
-    console.error('[FILE UPLOAD ERROR]', err);
+    console.error('[UPLOAD ERROR]', err.message);
     res.status(500).json({ msg: 'Upload failed: ' + err.message });
   }
 });
